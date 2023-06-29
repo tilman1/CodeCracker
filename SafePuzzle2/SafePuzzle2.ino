@@ -263,7 +263,8 @@ void CodeCombination::verifyCode(CodeCombination & OtherCodeCombination)
   int correctPlace = 0;                                       //Variable for the number of correct digits in the correct place
   int usedDigits[4] = {0,0,0,0};                              //Mark off matching digits 
 
-  
+
+  // First, check for correct number and position of an code digit 
   for (int i=0 ; i<= 3 ; i++)                                 
   {
     if (code[i] == OtherCodeCombination.code[i])
@@ -273,18 +274,25 @@ void CodeCombination::verifyCode(CodeCombination & OtherCodeCombination)
       correctNum++;
       usedDigits[i] = 1;
     }
-    else
+  }
+
+  // Then, check for correct number but incorrect position of an entered code digit
+  for (int i=0 ; i<= 3 ; i++)
+  {
+    if (code[i] != OtherCodeCombination.code[i])
     {
       // digit does not match. Now check if digits exists in the code. Matching digits are excluded
       for (int j=0 ; j<= 3 ; j++)
       {
         if (usedDigits[j] != 1)
+        {
           if (code[i] == OtherCodeCombination.code[j])
           {
             correctNum++;
             usedDigits[j] = 1;
             break;    // stop if digit is found
           }
+        }
       }
     }
   }
