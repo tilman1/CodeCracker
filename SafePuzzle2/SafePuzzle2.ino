@@ -1,5 +1,6 @@
 //Software for Safe Puzzle -- Rewrite of code from Michael Klements + extentsions
 //(C) Tilman Glötzner 2023 - 2026
+#define DEBUG 0
 #include <SPI.h>                          //Import libraries to control the OLED display
 
 #include <Adafruit_GFX.h>
@@ -885,9 +886,11 @@ void CombinationLock::displayCrackedMessage(int numGuesses)
   display.setCursor(35,20);                               //Set the display cursor position
   display.print(F("Attempt(s)"));                           //Set the display text
   display.display();                                      //Output the display text
+#if DEBUG
   Serial.print(F("Cracked in "));
   Serial.print(numGuesses);
   Serial.println(F(" attempt(s)"));
+#endif
 }
 
 void CombinationLock::displayGuessCode()
@@ -958,14 +961,18 @@ void CombinationLock::runSetCode()
       if (readCodeFromEEprom(&_code) == false)
       {
         // no code saved or not active
+#if DEBUG
         Serial.println(F("No combination preset."));
+#endif
         _enteredCode = _code;
         _state = 1;
       }
       else
       {
         // active code combination  => deactivate
+#if DEBUG
         Serial.println(F("Stored combination available."));
+#endif
         _state = 10;
       }
     break;
@@ -1136,28 +1143,36 @@ void CombinationLock::run()
         if (_button->getTimeButtonPressed() < pushButtonCloseSafeTime)   //short press of button
         {
          // close safe
+#if DEBUG
          Serial.println("Close Safe");
+#endif
          lockServo.write(LeverPositionLocked); 
          _locked = true;
          if (readCodeFromEEprom(&_code) == false) // if no valid combination is saved ...
          {
-           Serial.println(F("No Combination set."));
            setRandomCode(_button->getTimeButtonPressed());           //  ... set random code is to be guessed
+#if DEBUG
+           Serial.println(F("No Combination set."));
            Serial.print(F("Random code: ")); // debug: dump code on serial port
            _code.DumpCode();
-           Serial.println();   
+           Serial.println();
+#endif
          }
+#if DEBUG
          else
          {
           Serial.print(F("Combination '")); _code.DumpCode(); Serial.println(F("' set."));
          }
+#endif
          _mode = guessCode;                       // user can now try to guess the code
         }
         if ((_button->getTimeButtonPressed() >= pushButtonCloseSafeTime) &&  // medium press of button
          (_button->getTimeButtonPressed() < pushButtonGotoMenuTime))
         {
          // user wishes to set a code combination for the safe
+#if DEBUG
          Serial.println(F("Set Code requested"));
+#endif
          _mode =  enterCode;  // user can now enter code combination
          _state = 0;          // reset state machine controlling the process of inputing the combination
         }
@@ -1199,9 +1214,11 @@ void CombinationLock::setLocked(bool lockState)
 void CombinationLock::evalEnteredCombination()
 {
   _code.verifyCode(_enteredCode);  // check entered code against code combination
+#if DEBUG
   Serial.print(F("Entered Code: "));  // debug: dump entered code onto serial port
   _enteredCode.DumpCode();
    Serial.println();
+#endif
 }
 
 void CombinationLock::setRandomCode()
@@ -1433,6 +1450,9 @@ bool readCodeFromEEprom(class CodeCombination* code)
   if (codeStorage.isKey(codeValueKey)) {
     value = codeStorage.getUShort(codeValueKey, 0);
     checksum = codeStorage.getUShort(codeChecksumKey, 0);
+#if DEBUG
+    Serial.print("read: Value: ");Serial.print(value);Serial.print(" Checksum: ");Serial.println(checksum);
+#endif
     // Verify integrity
     if (checksum != makeChecksum(value)) {
       // set code to inactive
@@ -1442,7 +1462,9 @@ bool readCodeFromEEprom(class CodeCombination* code)
   else
   {
     // code storage does not exist => set code inactive bit
+#if DEBUG
     Serial.println("read: No code set");
+#endif
     value = 0x4000;
   }
   codeStorage.end();
@@ -1458,7 +1480,9 @@ void setup() {
   // put your setup code here, to run once:
   Leds.turnOffLEDs();
   Serial.begin(115200);                                 //Starts the Serial monitor for debugging
+#if DEBUG
   Serial.println("===============================");
+#endif
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))      //Connect to the OLED display
   {
     Serial.println("SSD1306 allocation failed");   //If connection fails
@@ -1466,7 +1490,9 @@ void setup() {
   }
   display.clearDisplay();                             //Clear display
   display.setTextColor(SSD1306_WHITE); 
+#if DEBUG
   Serial.println("SSD1306 succeeded");
+#endif
 #ifdef __AVR_ATmega328P__
   // Setup interrupt for Pin A0 
   PCICR |= B00000110;     //Bit1,2 = 1 -> "PCIE1","PCIE2"  enabeled (PCINT8 to PCINT14 and PCINT16 to PCINT23)
@@ -1497,13 +1523,17 @@ void setup() {
   lockServo.attach(servoPin);
   if (readCodeFromEEprom(&code) == false)
   {
+#if DEBUG
     Serial.write("Lock not locked\n");
+#endif
     lockServo.write(LeverPositionOpened);
     Lock.setLocked(false);
   }
   else
   {
+#if DEBUG
     Serial.write("Lock locked\n");
+#endif
     lockServo.write(LeverPositionLocked);
     Lock.setLocked(true);
   }
