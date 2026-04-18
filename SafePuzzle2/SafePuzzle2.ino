@@ -166,13 +166,14 @@ CodeCombination::CodeCombination(byte digit0, byte digit1, byte digit2, byte dig
 
 char* CodeCombination::getValue()
 {
-
-  _codeStr[4] = 0x0;
   for (int i=0 ; i<= 3 ; i++)   
-  {                                
-     _codeStr[i]  = (char)(code[i]+48);
+  {
+     byte d = code[i];
+     if (d > 9) d = 0;   // ensure numbers between 0 - 9
+     _codeStr[i]  = (char)(d + 48);
      
   } 
+  _codeStr[4] = 0x0;
   //Serial.println( _codeStr); 
   /*
   Serial.print("'");
