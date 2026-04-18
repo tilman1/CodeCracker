@@ -7,8 +7,11 @@
 #include <Adafruit_SSD1306.h>
 #include <EEPROM.h>
 #ifdef ESP32
+#define ISR_ATTR IRAM_ATTR
 #include <ESP32Servo.h>
+#include <Preferences.h>
 #else
+#define ISR_ATTR
 #include <Servo.h>                        //Import library to control the servo
 #endif
 
@@ -18,6 +21,13 @@ const unsigned long pushButtonGotoMenuTime = 2500;
 const unsigned long messageDelay = 4000;
 const byte LeverPositionLocked = 21;
 const byte LeverPositionOpened = 120;
+
+#ifdef ESP32
+Preferences codeStorage;
+char* codeNamespace = "code";
+char* codeValueKey = "code";
+char* codeChecksumKey = "cksum";
+#endif
 
 Servo lockServo;                          //Create a servo object for the lock servo
 
@@ -465,6 +475,7 @@ class Encoder
     byte getValue();
     void setValue(byte value);
     void setLimits(byte lowerLimit, byte upperLimit);
+    void setPins(byte pinA, byte pinB);
      
 
   private:
@@ -475,6 +486,8 @@ class Encoder
      volatile byte encoderPosOld = 0;
      byte _lowerLimit = 0;
      byte _upperLimit = 9;
+     byte _pinA = 0;
+     byte _pinB = 0;
   
 };
 
@@ -509,30 +522,47 @@ void Encoder::setLimits(byte lowerLimit, byte upperLimit)
    _upperLimit = upperLimit;
 }
 
-void Encoder::PinA()                   //Rotary encoder interrupt service routine for one encoder pin
+// setting the pins is only needed for ESP32
+void Encoder::setPins(byte pinA, byte pinB)
 {
+  _pinA = pinA;
+  _pinB = pinB;
+}
+
+void ISR_ATTR Encoder::PinA()                   //Rotary encoder interrupt service routine for one encoder pin
+{
+
   volatile byte reading = 0;  
-        
+#ifdef ESP32
+  if (gpio_get_level((gpio_num_t)_pinA)) reading += 4;
+  if (gpio_get_level((gpio_num_t)_pinB)) reading += 8;
+#endif
+#ifdef __AVR_ATmega328P__
   reading = PIND & 0xC;                   //Read all eight pin values then strip away all but pinA and pinB's values
-  if(reading == B00001100 && aFlag)       //Check that we have both pins at detent (HIGH) and that we are expecting detent on this pin's rising edge
-  {     
+#endif
+  if ((reading == B00001100) && (aFlag))  //Check that we have both pins at detent (HIGH) and that we are expecting detent on this pin's rising edge
+  {
     if(encoderPos>_lowerLimit)
-      encoderPos --;                      //Decrement the encoder's position count
+      encoderPos--;                      //Decrement the encoder's position count
     else
-      encoderPos = _upperLimit;                     //Go back to 9 after 0
+      encoderPos = _upperLimit;           //Go back to 9 after 0
     bFlag = 0;                            //Reset flags for the next turn
     aFlag = 0;                            //Reset flags for the next turn
   }
   else if (reading == B00000100)          //Signal that we're expecting pinB to signal the transition to detent from free rotation
-    bFlag = 1;                                  
+    bFlag = 1;
 }
 
-void Encoder::PinB()                   //Rotary encoder interrupt service routine for the other encoder pin
+void ISR_ATTR Encoder::PinB()                   //Rotary encoder interrupt service routine for the other encoder pin
 {
   volatile byte reading = 0;  
-        
+#ifdef ESP32
+  if (gpio_get_level((gpio_num_t)_pinA)) reading += 4;
+  if (gpio_get_level((gpio_num_t)_pinB)) reading += 8;
+#endif
+#ifdef __AVR_ATmega328P__
   reading = PIND & 0xC;                   //Read all eight pin values then strip away all but pinA and pinB's values
-  
+#endif
   if (reading == B00001100 && bFlag)      //Check that we have both pins at detent (HIGH) and that we are expecting detent on this pin's rising edge
   {
     if(encoderPos<_upperLimit)
@@ -543,7 +573,7 @@ void Encoder::PinB()                   //Rotary encoder interrupt service routin
     aFlag = 0;                            //Reset flags for the next turn
   }
   else if (reading == B00001000)          //Signal that we're expecting pinA to signal the transition to detent from free rotation
-    aFlag = 1;                            
+    aFlag = 1;
 }
 
 class Button
@@ -1011,10 +1041,12 @@ void CombinationLock::runSetCode()
      break;
     case 3:
          // save code in Memory
+#if DEBUG
          Serial.print(F("Saving Code '")); Serial.print(_enteredCode.getValue());Serial.println(F("'"));
+#endif
          writeCodeToEEprom(_enteredCode,_codeActive);
          displaySaving();
-         dumpEEPROM();
+         //dumpEEPROM();
          _leds->spiralLEDs(150);
          _state = 4; 
      break;
@@ -1225,34 +1257,74 @@ void CombinationLock::updateLedNotifier()
 #ifdef __AVR_ATmega328P__
 #define IRAM_ATTR
 static int ledpin = LED_BUILTIN;
-static int pinA = 2;                      //Hardware interrupt digital  D2/GPIO5
-static int pinB = 3;                      //Hardware interrupt digital  D3/GPIO6
-static int buttonPin = A0;                 //A0/GPIO19 number for encoder push button
-static int servoPin  = 11;                //D11/GPIO14 number for servo to lock door
+static int pinA = 2;                  //Hardware interrupt digital  D2/GPIO5
+static int pinB = 3;                  //Hardware interrupt digital  D3/GPIO6
+static int buttonPin = A0;            //A0/GPIO19 number for encoder push button
+static int servoPin  = 11;            //D11/GPIO14 number for servo to lock door
 
 //const unsigned long pushButtonDebounceTime = 10;
 LEDNotifier Leds(4,6,10,8,5,7,12,9); // GPIO number for correct place LEDs (Indicate a correct digit in the correct place)
                                      // and correct number LEDs  (Indicate a correct digit)
 
 #endif
+#ifdef ESP32
+LEDNotifier Leds(12,27,32,25,13,14,33,26); // GPIO number for correct place LEDs (Indicate a correct digit in the correct place)
+                                           // and correct number LEDs  (Indicate a correct digit)
 
+static int ledpin = LED_BUILTIN;
+static int pinA = 18;                  //Encoder A: GPIO19
+static int pinB = 19;                  //Encoder B: GPIO18
+static int buttonPin = 5;              //Encoder push button: GPIO5
+static int servoPin  = 17;            // Servo to lock door: GPIO17
+#endif
+bool A0State = HIGH;
+bool A0StateOld= HIGH;
 
 Encoder Encoder;
 Button Button;
 CombinationLock Lock(&Encoder,&Button, &Leds);
 
+#ifdef ESP32
+void buttonChangeISR()
+{
+   // For PCINT of pins A0 to A5, Reset
+   A0State = digitalRead(buttonPin);
+   if (A0State == HIGH && A0StateOld == LOW)
+   {
+    // Rising flank
+    ButtonRisingISR();
+   }
+   if (A0State == LOW && A0StateOld == HIGH)
+   {
+    // Falling flank
+    ButtonFallingISR();
+   }
+   A0StateOld = A0State;
+}
+#endif
+
 void PinAISR() 
 {
+#ifdef __AVR_ATmega328P__
   cli();
   Encoder.PinA();
   sei();             //Restart interrupts
+#endif
+#ifdef ESP32
+  Encoder.PinA();
+#endif
 }
 
 void PinBISR() 
 {
+#ifdef __AVR_ATmega328P__
   cli();
   Encoder.PinB();
   sei();            //Restart interrupts
+#endif
+#ifdef ESP32
+  Encoder.PinB();
+#endif
 }
 
 void ButtonRisingISR()
@@ -1266,15 +1338,19 @@ void ButtonFallingISR()
   Button.fallingFlank();
 }
 
+uint16_t makeChecksum(uint16_t value) {
+  return value ^ 0xBEEF;
+}
+#ifdef __AVR_ATmega328P__
 void deleteEEprom()
 {
   for ( unsigned short k = 0; k < 1024; k ++)
   { 
-     EEPROM.update( k, 0xff );
+    EEPROM.update(k, 0xFF);
   }
 }
 
-bool findFirstFreeEEpromEntry(unsigned short* address )
+bool findFirstFreeEEpromEntry(word* address )
 {
    word eeAddress = 0;
    word value;
@@ -1293,6 +1369,7 @@ bool findFirstFreeEEpromEntry(unsigned short* address )
    *address = eeAddress;
    return found;
 }
+#endif
 
 void writeCodeToEEprom(class CodeCombination& code, bool active)
 {
@@ -1301,6 +1378,8 @@ void writeCodeToEEprom(class CodeCombination& code, bool active)
   word oldValue;
   if (active == false) // if combination is to be deactivated, set deactivation flag
      value |= 1<<14;
+
+#ifdef __AVR_ATmega328P__
   bool found = findFirstFreeEEpromEntry(&address);
 
   if (found == true)
@@ -1326,8 +1405,23 @@ void writeCodeToEEprom(class CodeCombination& code, bool active)
     //Serial.print(F("writeCodeToEEprom: address=")); Serial.print(address);Serial.print(F(";val="));Serial.println(value);
     EEPROM.put( address, value );
   }
+#endif
+
+#ifdef ESP32
+  codeStorage.begin(codeNamespace, false); // read-write
+  uint16_t current = codeStorage.getUShort(codeValueKey, 0);
+  if (current != value) {
+    codeStorage.putUShort(codeValueKey, value);
+    codeStorage.putUShort(codeChecksumKey, makeChecksum(value));
+#if DEBUG
+    Serial.print("Code updated in NVS:");Serial.println(value);
+#endif
+  }
+  codeStorage.end();
+#endif
 }
 
+#ifdef __AVR_ATmega328P__
 bool dumpEEPROM()
 {
   Serial.println(F("EEPROM Dump"));
@@ -1343,11 +1437,13 @@ bool dumpEEPROM()
   }
   Serial.println();
 }
+#endif
 
 bool readCodeFromEEprom(class CodeCombination* code)
 {
   word address;
   word value;
+#ifdef __AVR_ATmega328P__
   bool found = findFirstFreeEEpromEntry(&address);
 
   if (found == true)
@@ -1359,24 +1455,44 @@ bool readCodeFromEEprom(class CodeCombination* code)
       return false; 
     }
   }
-  
   address -=2; 
   EEPROM.get(address,value);
-  //Serial.print("read: ");Serial.println(value);
- 
-  code->setValue(value& 0x3FFF);       // mask out bit 14 and 15
+  Serial.print("read: ");Serial.println(value);
+#endif
+#if ESP32
+  uint16_t checksum;
 
+   // Read code from NVS
+  codeStorage.begin(codeNamespace, true); // read-only
+  if (codeStorage.isKey(codeValueKey)) {
+    value = codeStorage.getUShort(codeValueKey, 0);
+    checksum = codeStorage.getUShort(codeChecksumKey, 0);
+    // Verify integrity
+    if (checksum != makeChecksum(value)) {
+      // set code to inactive
+      value |= 0x4000;
+    }
+  }
+  else
+  {
+    // code storage does not exist => set code inactive bit
+    Serial.println("read: No code set");
+    value = 0x4000;
+  }
+  codeStorage.end();
+#endif
+  code->setValue(value& 0x3FFF);       // mask out bit 14 and 15
   if (value & 0x4000)                  // bit 14 marks the entry as inactive
     return false;
-  //Serial.print(F("Read @")); Serial.print(address);Serial.print(F("="));Serial.println(*value);
+  //Serial.print(F("Read @")); Serial.print(address);Serial.print(F("="));Serial.println(value);
   return true;
 }
 
 void setup() {
   // put your setup code here, to run once:
-
   Leds.turnOffLEDs();
   Serial.begin(115200);                                 //Starts the Serial monitor for debugging
+  Serial.println("===============================");
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))      //Connect to the OLED display
   {
     Serial.println("SSD1306 allocation failed");   //If connection fails
@@ -1385,54 +1501,65 @@ void setup() {
   display.clearDisplay();                             //Clear display
   display.setTextColor(SSD1306_WHITE); 
   Serial.println("SSD1306 succeeded");
-
+#ifdef __AVR_ATmega328P__
   // Setup interrupt for Pin A0 
   PCICR |= B00000110;     //Bit1,2 = 1 -> "PCIE1","PCIE2"  enabeled (PCINT8 to PCINT14 and PCINT16 to PCINT23)
   PCMSK1 |= B00000001;    //Bit0 = 1 -> "PCINT16" enabeled -> A0 will trigger interrupt
   PCMSK2 |= B00001100;    //Bit2,3= 1 ->   PCINT18,  PCINT19 enabeled -> D2,D3 will trigger interrupt
+#endif
+ 
   // setup encoder pins
   pinMode(pinA, INPUT_PULLUP);                        //Set pinA as an input, pulled HIGH to the logic voltage
   pinMode(pinB, INPUT_PULLUP);                        //Set pinB as an input, pulled HIGH to the logic voltage
   pinMode(buttonPin, INPUT_PULLUP);                   //Set the encoder button as an input, pulled HIGH to the logic voltage
-  
+
+#ifdef ESP32
+
+  Encoder.setPins(pinA,pinB);
+  // Attach encoder button to ISR
+  attachInterrupt(buttonPin, buttonChangeISR, CHANGE);
+
+  // Attach encoder pin A rising to ISR
+  attachInterrupt(pinA, PinAISR, RISING);
+
+  // Attach encoder pin B rising to ISR
+  attachInterrupt(pinB, PinBISR, RISING);
+
+#endif
   // if a combintation is set, assume the safe to be closed
   CodeCombination code;
+  lockServo.attach(servoPin);
   if (readCodeFromEEprom(&code) == false)
   {
+    Serial.write("Lock not locked\n");
     lockServo.write(LeverPositionOpened);
     Lock.setLocked(false);
   }
   else
   {
+    Serial.write("Lock locked\n");
     lockServo.write(LeverPositionLocked);
     Lock.setLocked(true);
   }
-  lockServo.attach(servoPin);
-#ifdef __AVR_ATmega328P__
-  Serial.println(F("Interrupts for Encoder installed"));
+
+  delay(1000);
+
+#if DEBUG
   Serial.print(F("Pin A =  ")); Serial.println(pinA);
   Serial.print(F("Pin B =  ")); Serial.println(pinB);
   Serial.print(F("Button =  ")); Serial.println(buttonPin);
   Serial.print(F("Servo Pin =  ")); Serial.println(servoPin);
+  Serial.print(F("Code =  ")); Serial.println(code.getValue());
+  Serial.print(F("isLock = "));Serial.println(Lock.isLocked());
 #endif
- 
- 
   //Leds.spiralLEDs(300);
+
   initialMessage();
   Leds.turnOffLEDs();
   if (Lock.isLocked() == false)
     displayPressButtonMessage();
-  Serial.print(F("isLock = "));Serial.println(Lock.isLocked());
-  
   
 }
-
- bool A0State = HIGH;
- bool A0StateOld= HIGH;
- bool D2State = HIGH;
- bool D2StateOld = HIGH;
- bool D3State = HIGH;
- bool D3StateOld = HIGH;
 
 
 
@@ -1440,8 +1567,12 @@ void loop() {
   Lock.run();
 }
 
-
 #ifdef __AVR_ATmega328P__
+bool D2State = HIGH;
+bool D2StateOld = HIGH;
+bool D3State = HIGH;
+bool D3StateOld = HIGH;
+
 ISR (PCINT1_vect) 
 {
     // For PCINT of pins A0 to A5, Reset
