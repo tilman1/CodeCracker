@@ -1,6 +1,5 @@
 //Software for Safe Puzzle -- Rewrite of code from Michael Klements + extentsions
-//(C) Tilman Glötzner 2023
-
+//(C) Tilman Glötzner 2023 - 2026
 #include <SPI.h>                          //Import libraries to control the OLED display
 
 #include <Adafruit_GFX.h>
@@ -77,10 +76,8 @@ const unsigned char Vault60x60 [480] PROGMEM = {
 };
 #endif
 
-
 #define OLED_RESET -1                     // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);   // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-
 
 void initialMessage()
 {
@@ -102,7 +99,6 @@ void initialMessage()
   display.clearDisplay();
 }
 
-
 void displayPressButtonMessage()
 {
   display.clearDisplay();                                   //Clear the display
@@ -122,11 +118,6 @@ void displayPressButtonMessage()
 }
 
 
-
-
-
-
-   
 class CodeCombination {
   public: 
     CodeCombination();
@@ -136,13 +127,9 @@ class CodeCombination {
     bool operator!=( CodeCombination & OtherCodeCombination);
     char* getValue();
   
-    
     byte operator [] (size_t idx);
     void setValue(size_t idx,byte value);
     void setValue(word value);
-    
-   
-    
     void verifyCode(CodeCombination & OtherCodeCombination);
     byte getNofCorrectNumber();
     byte getNofCorrectPlaces();
@@ -159,9 +146,6 @@ class CodeCombination {
     byte _correctPlace = 0;   
     word powword(int x, int y);
 };
-
-
-
 
 CodeCombination::CodeCombination()
 {
@@ -196,7 +180,6 @@ char* CodeCombination::getValue()
   */
   return _codeStr;
 }
-
       
 bool CodeCombination::operator==( CodeCombination & OtherCodeCombination)
 {
@@ -224,8 +207,6 @@ void CodeCombination::operator =(CodeCombination & OtherCodeCombination)
     code[i] = OtherCodeCombination.code[i];
 }
 
-
-
 byte CodeCombination::operator [] (size_t idx)
 {
   if (idx < 4)
@@ -237,7 +218,6 @@ void CodeCombination::setValue(size_t idx,byte value)
   if (idx < 4)
    code[idx] = value;
 }
-
 
 word CodeCombination::powword(int x, int y)
 {
@@ -354,6 +334,7 @@ byte CodeCombination::getNofCorrectPlaces()
 {
   return _correctPlace;
 }
+
 
 class LEDNotifier {
   public:
@@ -602,8 +583,6 @@ Button::Button()
 
 void Button::risingFlank()
 {
-
-
   if ((millis() - _releaseTime) > pushButtonDebounceTime)                         // debounce switch.
   {
     _engaged = false;
@@ -611,21 +590,17 @@ void Button::risingFlank()
     _releaseTime = millis();
     _deltaTime = _releaseTime - _pressTime;
   }
-  
 }
 
 void Button::fallingFlank()
 {
-  
   if (((millis() - _pressTime) > pushButtonDebounceTime) 
   && ((millis() - _releaseTime) > pushButtonDebounceTime))
-  
   {
     _pressTime = millis();
     _releaseTime = 0;
     _engaged = true;
     _released = false;
-    
   }
 }
 
@@ -652,6 +627,7 @@ enum ModeT
   enterCode,
   guessCode
 };
+
 
 class YesNoDialog
 {
@@ -725,7 +701,6 @@ void YesNoDialog::refresh()
   display.display(); 
 }
 
-
 bool YesNoDialog::isFinished()
 {
   bool _rc; 
@@ -740,6 +715,7 @@ bool YesNoDialog::isFinished()
   }
   return _rc;
 }
+
 
 class Dial
 {
@@ -761,7 +737,6 @@ class Dial
    void presetEnteredCode(CodeCombination* code);
    void reset();
 };
-
 
 Dial::Dial(Encoder* en, Button* but,uint16_t ypos)
 {
@@ -792,7 +767,6 @@ void Dial::enterDigits()
      _enteredCode.setValue(_currentDigit,_encoder->getValue());
      updateDisplayCode();
     }
-
     if (_button->isReleased())                              // if the encoder button was pressed goto next digit
     {
       if (_currentDigit < 3)
@@ -845,6 +819,7 @@ void Dial::reset()
   
  
 }
+
 
 class CombinationLock 
 {
@@ -975,7 +950,6 @@ void CombinationLock::displaySaved()
   display.display();                                        //Output the display text
 }
 
-
 void CombinationLock::runSetCode()
 {
   switch (_state) 
@@ -1068,7 +1042,7 @@ void CombinationLock::runSetCode()
         if (confirmDialog == NULL)
         { 
           // display: deactivate code (yes/no)
-          confirmDialog = new YesNoDialog(30, _encoder,_button,  true);  
+          confirmDialog = new YesNoDialog(30, _encoder, _button, true);
           displayDeactivateCode(_code.getValue());
           
         }
@@ -1100,8 +1074,6 @@ void CombinationLock::runGuessCombination()
     displayGuessCode();
     dial = new Dial(_encoder, _button,15);
     _numGuess = 1;
-    
-    
   }
   else
   { // instance of dial object is available
@@ -1142,12 +1114,10 @@ void CombinationLock::run()
      _delayEngaged = false;
      displayPressButtonMessage();
      _leds->turnOffLEDs();
-     
    }
    else
      return;
   }
-  
   if (_locked == true)                 // if the safe is locked, the combination can be entered
   {
     if (_mode == guessCode)
@@ -1205,10 +1175,6 @@ void CombinationLock::run()
    }
   }
 }
-
-// reset lock to allow user to enter his next guess of the combination
-
-
 
 bool CombinationLock::isCodeCorrect()
 {
@@ -1621,6 +1587,7 @@ ISR (PCINT2_vect)
    
 }
 #endif
+
 /*
 bool unittestCodeCombination()
 {
