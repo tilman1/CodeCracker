@@ -16,7 +16,7 @@ const unsigned long pushButtonDebounceTime = 10;
 const unsigned long pushButtonCloseSafeTime = 500;
 const unsigned long pushButtonGotoMenuTime = 2500;
 const unsigned long messageDelay = 4000;
-const byte LeverPositionLocked = 16;
+const byte LeverPositionLocked = 21;
 const byte LeverPositionOpened = 120;
 
 Servo lockServo;                          //Create a servo object for the lock servo
