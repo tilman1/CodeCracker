@@ -640,23 +640,21 @@ class YesNoDialog
    Button* _button;
 };
 
-
 YesNoDialog::YesNoDialog(int ypos, Encoder* en,  Button* but, bool presetYes)
 {
   _ypos = ypos;
   en->setLimits(0, 1);
-  
   en->setValue(0);
-  refresh();
-  display.display(); 
- 
+
   _encoder = en;  
   _button = but;
   if (presetYes) 
    _encoder->setValue(0);
   else
-   _encoder->setValue(1);  
-    
+   _encoder->setValue(1);
+
+  refresh();
+  display.display();
 }
 
 bool YesNoDialog::isYes()
